@@ -1,0 +1,12 @@
+version: "3.8"
+
+services:
+  cyberfoil-feed:
+    build: .
+    container_name: cyberfoil-feed
+    restart: unless-stopped
+    environment:
+      - ROMM_URL=http://192.168.2.132:8285
+      - API_KEY=rmm_1a90aaa293475819cd54a76f4f717f7cdb80281a24c5d839c8aa2759c270901d
+    ports:
+      - "8286:8080"
