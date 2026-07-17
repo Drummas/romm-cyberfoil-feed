@@ -1,18 +1,38 @@
 from flask import Flask, jsonify
 import requests
+import logging
+import os
 
-ROMM_URL = "http://192.168.2.132:8285"
-API_KEY = "rmm_1a90aaa293475819cd54a76f4f717f7cdb80281a24c5d839c8aa2759c270901d"
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
+ROMM_URL = os.environ.get("ROMM_URL")
+API_KEY = os.environ.get("API_KEY")
+
 def get_roms():
-    r = requests.get(
-        f"{ROMM_URL}/api/roms",
-        headers={"X-API-Key": API_KEY}
-    )
-    print("DEBUG RAW RESPONSE:", r.text)   # ← IMPORTANT
-    return r.json()["items"]               # ← CORRECT FOR YOUR ROMM
+    try:
+        url = (
+            f"{ROMM_URL}/api/roms"
+            "?platform_ids=22"
+            "&limit=10000"
+        )
+
+        r = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            timeout=5
+        )
+
+        logging.info("DEBUG URL: %s", url)
+        logging.info("DEBUG STATUS: %s", r.status_code)
+        logging.info("DEBUG RAW RESPONSE: %s", r.text[:500])
+
+        data = r.json()
+        return data.get("items", [])
+    except Exception as e:
+        logging.error("DEBUG ERROR: %s", e)
+        return []
 
 @app.route("/cyberfoil.json")
 def cyberfoil_feed():
@@ -20,9 +40,6 @@ def cyberfoil_feed():
     feed = []
 
     for rom in roms:
-        if rom["platform_slug"] != "switch":
-            continue
-
         title = rom["name"]
         size = rom["fs_size_bytes"]
         file_path = rom["full_path"]
