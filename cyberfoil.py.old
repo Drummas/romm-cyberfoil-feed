@@ -1,0 +1,104 @@
+from flask import Flask, Response
+import requests
+import logging
+import os
+from urllib.parse import quote
+import json
+
+logging.basicConfig(level=logging.INFO)
+
+app = Flask(__name__)
+
+ROMM_URL = os.environ.get("ROMM_URL")
+API_KEY = os.environ.get("API_KEY")
+
+
+@app.after_request
+def fix_headers(response):
+    response.headers["Content-Type"] = "application/json"
+    response.headers["Connection"] = "close"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def get_roms():
+    try:
+        url = f"{ROMM_URL}/api/roms?platform_ids=22&limit=10000"
+        r = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            timeout=5
+        )
+
+        logging.info("DEBUG URL: %s", url)
+        logging.info("DEBUG STATUS: %s", r.status_code)
+        logging.info("DEBUG RAW RESPONSE: %s", r.text[:500])
+
+        data = r.json()
+        return data.get("items", [])
+    except Exception as e:
+        logging.error("DEBUG ERROR: %s", e)
+        return []
+
+
+@app.route("/shop.json")
+def cyberfoil_feed():
+    roms = get_roms()
+    full_roms = []
+
+    # Fetch full ROM objects
+    for rom in roms:
+        rid = rom["id"]
+        detail_url = f"{ROMM_URL}/api/roms/{rid}"
+        r = requests.get(detail_url, headers={"Authorization": f"Bearer {API_KEY}"})
+        if r.status_code == 200:
+            full_roms.append(r.json())
+
+    files = []
+
+    for rom in full_roms:
+        # Find the actual XCI/NSP file
+        file_entry = next(
+            (f for f in rom.get("files", [])
+             if f["file_name"].endswith(".xci") or f["file_name"].endswith(".nsp")),
+            None
+        )
+
+        if not file_entry:
+            continue
+
+        # Build download URL
+        encoded_name = quote(file_entry["file_name"])
+        file_url = f"{ROMM_URL}/api/roms/{file_entry['id']}/files/content/{encoded_name}"
+
+        # Title
+        title = rom.get("name", file_entry["file_name"])
+
+        # Cover image
+        icon = rom.get("path_cover_small") or rom.get("url_cover") or ""
+        if icon.startswith("/"):
+            icon = f"{ROMM_URL}{icon}"
+
+        # Tinfoil-compatible file entry with extra fields
+        files.append({
+            "url": file_url,
+            "size": file_entry["file_size_bytes"],
+            "title": title,
+            "iconUrl": icon
+        })
+
+    # Tinfoil schema, with key order matching RomM's feed
+    output = {
+        "files": files,
+        "directories": [],
+        "titledb": {},
+        "success": "RomM Switch Library"
+    }
+
+    # Manually serialize to preserve key order
+    json_body = json.dumps(output, ensure_ascii=False, separators=(",", ":"))
+
+    return Response(json_body, mimetype="application/json")
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
