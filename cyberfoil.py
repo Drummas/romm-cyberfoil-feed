@@ -1,6 +1,5 @@
 from flask import Flask, jsonify
 import requests
-import os
 
 ROMM_URL = "http://192.168.2.132:8285"
 API_KEY = "rmm_1a90aaa293475819cd54a76f4f717f7cdb80281a24c5d839c8aa2759c270901d"
@@ -12,7 +11,7 @@ def get_roms():
         f"{ROMM_URL}/api/roms",
         headers={"X-API-Key": API_KEY}
     )
-    return r.json()
+    return r.json()["items"]  # your JSON has an "items" array
 
 @app.route("/cyberfoil.json")
 def cyberfoil_feed():
@@ -20,31 +19,24 @@ def cyberfoil_feed():
     feed = []
 
     for rom in roms:
-        rom_id = rom["id"]
-        title = rom.get("title")
-        title_id = rom.get("titleId")
-        version = rom.get("version")
-        size = rom.get("size")
+        # Only include Switch games
+        if rom["platform_slug"] != "switch":
+            continue
 
-        # Find the base .xci inside the folder
-        files = rom.get("files", [])
-        xci_files = [f for f in files if f.lower().endswith(".xci")]
+        title = rom["name"]
+        size = rom["fs_size_bytes"]
+        file_name = rom["fs_name"]
+        file_path = rom["full_path"]
+        icon = rom["path_cover_small"] or rom["url_cover"]
 
-        if not xci_files:
-            continue  # skip if no base game
-
-        base_xci = xci_files[0]
-
-        file_url = f"{ROMM_URL}/api/roms/{rom_id}/files/content/{base_xci}"
-        icon_url = f"{ROMM_URL}/api/roms/{rom_id}/icon"
+        # Build download URL
+        file_url = f"{ROMM_URL}/library/{file_path}"
 
         feed.append({
             "title": title,
-            "titleId": title_id,
-            "version": version,
-            "iconUrl": icon_url,
+            "size": size,
             "url": file_url,
-            "size": size
+            "iconUrl": icon
         })
 
     return jsonify(feed)
