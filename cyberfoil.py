@@ -11,7 +11,8 @@ def get_roms():
         f"{ROMM_URL}/api/roms",
         headers={"X-API-Key": API_KEY}
     )
-    return r.json()["items"]  # your JSON has an "items" array
+    print("DEBUG RAW RESPONSE:", r.text)   # ← IMPORTANT
+    return r.json()["items"]               # ← CORRECT FOR YOUR ROMM
 
 @app.route("/cyberfoil.json")
 def cyberfoil_feed():
@@ -19,17 +20,14 @@ def cyberfoil_feed():
     feed = []
 
     for rom in roms:
-        # Only include Switch games
         if rom["platform_slug"] != "switch":
             continue
 
         title = rom["name"]
         size = rom["fs_size_bytes"]
-        file_name = rom["fs_name"]
         file_path = rom["full_path"]
         icon = rom["path_cover_small"] or rom["url_cover"]
 
-        # Build download URL
         file_url = f"{ROMM_URL}/library/{file_path}"
 
         feed.append({
